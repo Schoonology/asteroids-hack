@@ -1,33 +1,44 @@
 var http = require('http')
 var sockjs = require('sockjs')
-var sockets = []
+var sendFunctions = []
 var state = {}
 var lastUpdate = Date.now()
 
-var ARTIFICIAL_LAG = 1000
+var MAX_ARTIFICIAL_LAG = 200
 var UPDATE_DELAY = 25
 var TOR_UPDATE_RATE = 0.5
 var VEL_UPDATE_RATE = 5
 var WIDTH = 500
 var HEIGHT = 500
 
-var echo = sockjs.createServer()
-echo.on('connection', function (sock) {
+var asteroids = sockjs.createServer()
+asteroids.on('connection', function (sock) {
   var id = Math.random().toString().slice(2, 6)
+  var lag = Math.random() * MAX_ARTIFICIAL_LAG
+
+  console.log('New ship %s has lag %sms', id, lag)
+
+  function send(data) {
+    if (typeof data === 'object') {
+      data = JSON.stringify(data)
+    }
+
+    setTimeout(function () {
+      sock.write(data)
+    }, lag)
+  }
 
   Object.keys(state).forEach(function (id) {
-    sock.write(JSON.stringify({
+    send({
       cmd: 'create',
       data: state[id]
-    }))
+    })
   })
 
+  sendFunctions.push(send)
   createShip(id)
-  sockets.push(sock)
 
   sock.on('data', function (message) {
-    console.log('data', message)
-
     message = JSON.parse(message)
 
     setTimeout(function () {
@@ -45,35 +56,27 @@ echo.on('connection', function (sock) {
         down(id)
         break
       }
-    }, ARTIFICIAL_LAG)
+    }, lag)
   })
 
   sock.on('close', function () {
-    sockets.splice(sockets.indexOf(sock), 1)
-    setTimeout(function () {
-      destroyShip(id)
-    }, ARTIFICIAL_LAG)
+    sendFunctions.splice(sendFunctions.indexOf(send), 1)
+    destroyShip(id)
   })
 })
 
 var server = http.createServer()
-echo.installHandlers(server, {
-  prefix:'/echo'
+asteroids.installHandlers(server, {
+  prefix:'/asteroids'
 })
 server.listen(9999, '0.0.0.0')
 
 setInterval(updateAll, UPDATE_DELAY)
 
 function broadcast(message) {
-  if (typeof message === 'object') {
-    message = JSON.stringify(message)
-  }
-
-  setTimeout(function () {
-    sockets.forEach(function (sock) {
-      sock.write(message)
-    })
-  }, ARTIFICIAL_LAG)
+  sendFunctions.forEach(function (send) {
+    send(message)
+  })
 }
 
 function createShip(id) {
