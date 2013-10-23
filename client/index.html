@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        height: 100%;
+        width: 100%;
+      }
+
+      .ship {
+        position: absolute;
+        font-weight: bold;
+      }
+
+      #container {
+        height: 500px;
+        width: 500px;
+        position: relative;
+        left: 20px;
+        top: 20px;
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container"></div>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+    <script src="http://cdn.sockjs.org/sockjs-0.3.min.js"></script>
+    <script>
+      var sock = new SockJS('http://localhost:9999/echo')
+
+      sock.onopen = function () {
+        console.log('open')
+      }
+      sock.onmessage = function (e) {
+        var data = JSON.parse(e.data)
+        var ship = data.data
+
+        switch (data.cmd) {
+        case 'create':
+          $('#container').append(
+            '<div class="ship" id="' + ship.id + '">&gt;</div>'
+          )
+        case 'update':
+          $('#' + ship.id).css('transform', 'rotate(' + ship.rot + 'rad)')
+          $('#' + ship.id).css('left', ship.pos.x)
+          $('#' + ship.id).css('top', ship.pos.y)
+          break
+        case 'delete':
+          $('#' + ship.id).detach()
+          break
+        }
+      }
+      sock.onclose = function () {
+        console.log('close')
+      }
+
+      $(document).ready(function () {
+        console.log('setting')
+        document.onkeydown = function (event) {
+          var cmd = null
+
+          event = event || window.event
+
+          console.log(event)
+
+          switch (String(event.keyCode)) {
+          case '37':
+            cmd = 'left'
+            break
+          case '38':
+            cmd = 'up'
+            break
+          case '39':
+            cmd = 'right'
+            break
+          case '40':
+            cmd = 'down'
+            break
+          }
+
+          if (cmd) {
+            console.log('sending', cmd)
+            sock.send(JSON.stringify({
+              cmd: cmd
+            }))
+          }
+        }
+      })
+    </script>
+  </body>
+</html>
